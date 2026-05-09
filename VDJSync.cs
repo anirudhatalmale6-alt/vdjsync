@@ -940,27 +940,42 @@ namespace VDJSync
             }
         }
 
-        public static List<string> ParseListingPage(string html, string baseUrl)
+        public static List<string> ParseListingPage(string content, string baseUrl)
         {
             var urls = new List<string>();
-            var matches = Regex.Matches(html, @"href\s*=\s*[""']([^""']*\.zip)[""']",
-                RegexOptions.IgnoreCase);
 
-            foreach (Match m in matches)
+            foreach (string rawLine in content.Split(new[] { '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries))
             {
-                string href = m.Groups[1].Value;
-                if (href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                    href.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                string line = rawLine.Trim();
+                if (string.IsNullOrEmpty(line)) continue;
+
+                if (line.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                    (line.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
                 {
-                    urls.Add(href);
+                    urls.Add(line);
+                    continue;
                 }
-                else
+
+                var match = Regex.Match(line, @"href\s*=\s*[""']([^""']*\.zip)[""']",
+                    RegexOptions.IgnoreCase);
+                if (match.Success)
                 {
-                    string bUrl = baseUrl.TrimEnd('/');
-                    int lastSlash = bUrl.LastIndexOf('/');
-                    if (lastSlash > 8)
-                        bUrl = bUrl.Substring(0, lastSlash);
-                    urls.Add(bUrl + "/" + href.TrimStart('/'));
+                    string href = match.Groups[1].Value;
+                    if (href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                        href.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        urls.Add(href);
+                    }
+                    else
+                    {
+                        string bUrl = baseUrl.TrimEnd('/');
+                        int lastSlash = bUrl.LastIndexOf('/');
+                        if (lastSlash > 8)
+                            bUrl = bUrl.Substring(0, lastSlash);
+                        urls.Add(bUrl + "/" + href.TrimStart('/'));
+                    }
                 }
             }
 
