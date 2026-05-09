@@ -438,6 +438,8 @@ namespace VDJSync
         public string PlaylistsFolderPath { get; set; }
         public string MP3ExtractPath { get; set; } = @"X:\";
         public string MP3ListingPageUrl { get; set; } = "";
+        public string MP3PageUsername { get; set; } = "";
+        public string MP3PagePassword { get; set; } = "";
         public string SparePath1 { get; set; } = "";
         public string SparePath2 { get; set; } = "";
         public string LastSyncTime { get; set; } = "";
@@ -504,6 +506,21 @@ namespace VDJSync
                 s.SparePath1 = ReadNode(doc, "/VDJSyncSettings/Paths/SparePath1") ?? "";
                 s.SparePath2 = ReadNode(doc, "/VDJSyncSettings/Paths/SparePath2") ?? "";
                 s.MP3ListingPageUrl = ReadNode(doc, "/VDJSyncSettings/MP3/ListingPageUrl") ?? "";
+                s.MP3PageUsername = ReadNode(doc, "/VDJSyncSettings/MP3/Username") ?? "";
+
+                string encMP3Pwd = ReadNode(doc, "/VDJSyncSettings/MP3/Password");
+                if (!string.IsNullOrEmpty(encMP3Pwd))
+                {
+                    try
+                    {
+                        byte[] encrypted = Convert.FromBase64String(encMP3Pwd);
+                        byte[] decrypted = ProtectedData.Unprotect(encrypted, null,
+                            DataProtectionScope.CurrentUser);
+                        s.MP3PagePassword = Encoding.UTF8.GetString(decrypted);
+                    }
+                    catch { s.MP3PagePassword = ""; }
+                }
+
                 s.LastSyncTime = ReadNode(doc, "/VDJSyncSettings/LastSyncTime") ?? "";
             }
             catch { }
@@ -550,6 +567,21 @@ namespace VDJSync
             var mp3 = doc.CreateElement("MP3");
             root.AppendChild(mp3);
             AddElement(doc, mp3, "ListingPageUrl", MP3ListingPageUrl);
+            AddElement(doc, mp3, "Username", MP3PageUsername);
+
+            string encMP3Pwd = "";
+            if (!string.IsNullOrEmpty(MP3PagePassword))
+            {
+                try
+                {
+                    byte[] plain = Encoding.UTF8.GetBytes(MP3PagePassword);
+                    byte[] encrypted = ProtectedData.Protect(plain, null,
+                        DataProtectionScope.CurrentUser);
+                    encMP3Pwd = Convert.ToBase64String(encrypted);
+                }
+                catch { }
+            }
+            AddElement(doc, mp3, "Password", encMP3Pwd);
 
             AddElement(doc, root, "LastSyncTime", LastSyncTime);
 
@@ -746,21 +778,37 @@ namespace VDJSync
             }
         }
 
-        public byte[] DownloadBytes(string fullUrl)
+        public byte[] DownloadBytes(string fullUrl, string username = null, string password = null)
         {
-            using (var plainClient = new HttpClient { Timeout = TimeSpan.FromMinutes(30) })
+            using (var handler = new HttpClientHandler())
             {
-                var response = plainClient.GetAsync(fullUrl).GetAwaiter().GetResult();
-                response.EnsureSuccessStatusCode();
-                return response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+                if (!string.IsNullOrEmpty(username))
+                {
+                    handler.Credentials = new NetworkCredential(username, password);
+                    handler.PreAuthenticate = true;
+                }
+                using (var client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(30) })
+                {
+                    var response = client.GetAsync(fullUrl).GetAwaiter().GetResult();
+                    response.EnsureSuccessStatusCode();
+                    return response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+                }
             }
         }
 
-        public string DownloadString(string fullUrl)
+        public string DownloadString(string fullUrl, string username = null, string password = null)
         {
-            using (var plainClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) })
+            using (var handler = new HttpClientHandler())
             {
-                return plainClient.GetStringAsync(fullUrl).GetAwaiter().GetResult();
+                if (!string.IsNullOrEmpty(username))
+                {
+                    handler.Credentials = new NetworkCredential(username, password);
+                    handler.PreAuthenticate = true;
+                }
+                using (var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) })
+                {
+                    return client.GetStringAsync(fullUrl).GetAwaiter().GetResult();
+                }
             }
         }
 
@@ -868,29 +916,28 @@ namespace VDJSync
 
     static class MP3ZipTracker
     {
-        public static string TrackingFilePath
-        {
-            get { return Path.Combine(AppSettings.SettingsDir, "completed_zips.txt"); }
-        }
+        private const string RegistryKeyPath = @"SOFTWARE\VDJSync\CompletedZips";
 
         public static HashSet<string> GetCompletedZips()
         {
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (!File.Exists(TrackingFilePath)) return set;
-
-            foreach (string line in File.ReadAllLines(TrackingFilePath))
+            using (var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath))
             {
-                string trimmed = line.Trim();
-                if (!string.IsNullOrEmpty(trimmed))
-                    set.Add(trimmed);
+                if (key == null) return set;
+                foreach (string name in key.GetValueNames())
+                    set.Add(name);
             }
             return set;
         }
 
         public static void MarkCompleted(string zipFileName)
         {
-            Directory.CreateDirectory(AppSettings.SettingsDir);
-            File.AppendAllText(TrackingFilePath, zipFileName + "\r\n", Encoding.UTF8);
+            using (var key = Registry.CurrentUser.CreateSubKey(RegistryKeyPath))
+            {
+                key.SetValue(zipFileName,
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                    RegistryValueKind.String);
+            }
         }
 
         public static List<string> ParseListingPage(string html, string baseUrl)
@@ -1100,7 +1147,10 @@ namespace VDJSync
                 return;
             }
 
-            string html = _client.DownloadString(_settings.MP3ListingPageUrl);
+            string mp3User = _settings.MP3PageUsername;
+            string mp3Pass = _settings.MP3PagePassword;
+
+            string html = _client.DownloadString(_settings.MP3ListingPageUrl, mp3User, mp3Pass);
             var zipUrls = MP3ZipTracker.ParseListingPage(html, _settings.MP3ListingPageUrl);
             var completed = MP3ZipTracker.GetCompletedZips();
 
@@ -1118,7 +1168,7 @@ namespace VDJSync
                     _log.Info("  Downloading: " + zipName);
                     string tempPath = Path.Combine(Path.GetTempPath(), "VDJSync_" + zipName);
 
-                    byte[] data = _client.DownloadBytes(zipUrl);
+                    byte[] data = _client.DownloadBytes(zipUrl, mp3User, mp3Pass);
                     File.WriteAllBytes(tempPath, data);
 
                     _log.Info("  Extracting to: " + _settings.MP3ExtractPath);
@@ -1227,7 +1277,7 @@ namespace VDJSync
         private TextBox _txtServerUrl, _txtUsername, _txtPassword;
         private TextBox _txtTracklistFile, _txtTracklistingFolder, _txtPlaylistsFolder;
         private TextBox _txtMP3ExtractPath, _txtSpare1, _txtSpare2;
-        private TextBox _txtMP3ListingUrl;
+        private TextBox _txtMP3ListingUrl, _txtMP3Username, _txtMP3Password;
 
         public SettingsForm()
         {
@@ -1236,7 +1286,7 @@ namespace VDJSync
             MaximizeBox = false;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(580, 540);
+            ClientSize = new Size(580, 580);
             Font = new Font("Segoe UI", 9f);
 
             int y = 10;
@@ -1317,14 +1367,21 @@ namespace VDJSync
             {
                 Text = "MP3 Downloads",
                 Location = new Point(10, y),
-                Size = new Size(555, 60)
+                Size = new Size(555, 95)
             };
             Controls.Add(grpMP3);
 
             AddLabel(grpMP3, "Listing URL:", 15, 25);
             _txtMP3ListingUrl = AddTextBox(grpMP3, 110, 22, 430);
 
-            y += 70;
+            AddLabel(grpMP3, "Username:", 15, 58);
+            _txtMP3Username = AddTextBox(grpMP3, 110, 55, 170);
+
+            AddLabel(grpMP3, "Password:", 300, 58);
+            _txtMP3Password = AddTextBox(grpMP3, 380, 55, 160);
+            _txtMP3Password.UseSystemPasswordChar = true;
+
+            y += 105;
 
             // Buttons
             var btnSave = new Button
@@ -1364,6 +1421,8 @@ namespace VDJSync
             _txtSpare1.Text = s.SparePath1;
             _txtSpare2.Text = s.SparePath2;
             _txtMP3ListingUrl.Text = s.MP3ListingPageUrl;
+            _txtMP3Username.Text = s.MP3PageUsername;
+            _txtMP3Password.Text = s.MP3PagePassword;
         }
 
         private void SaveSettings()
@@ -1389,7 +1448,9 @@ namespace VDJSync
                 MP3ExtractPath = _txtMP3ExtractPath.Text.Trim(),
                 SparePath1 = _txtSpare1.Text.Trim(),
                 SparePath2 = _txtSpare2.Text.Trim(),
-                MP3ListingPageUrl = _txtMP3ListingUrl.Text.Trim()
+                MP3ListingPageUrl = _txtMP3ListingUrl.Text.Trim(),
+                MP3PageUsername = _txtMP3Username.Text.Trim(),
+                MP3PagePassword = _txtMP3Password.Text
             };
             s.Save();
 
