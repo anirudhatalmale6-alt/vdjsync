@@ -1,0 +1,169 @@
+VDJ Sync - Server Setup Guide (Windows 11 with IIS WebDAV)
+============================================================
+
+This guide sets up WebDAV on your Windows 11 server so the VDJ Sync
+clients can upload/download files over HTTPS through any firewall.
+
+
+STEP 1: Enable IIS and WebDAV features
+---------------------------------------
+1. Open "Turn Windows features on or off" (search in Start menu)
+2. Check these boxes:
+   - Internet Information Services
+     - Web Management Tools
+       - IIS Management Console
+     - World Wide Web Services
+       - Common HTTP Features
+         - Default Document
+         - Directory Browsing
+         - Static Content
+       - Security
+         - Basic Authentication
+         - Windows Authentication
+       - WebDAV Publishing   <-- IMPORTANT
+
+3. Click OK and wait for installation to complete.
+4. Restart the PC if prompted.
+
+
+STEP 2: Create the sync folder
+-------------------------------
+1. Create a folder for all sync data, e.g.:
+   C:\VDJSyncData
+
+2. Right-click the folder > Properties > Security tab
+3. Click Edit > Add > type "IUSR" > Check Names > OK
+4. Give IUSR "Modify" permission > OK
+5. Also add "IIS_IUSRS" group with "Modify" permission
+
+
+STEP 3: Configure WebDAV in IIS
+---------------------------------
+1. Open IIS Manager (search "IIS" in Start menu)
+2. In the left panel, expand your server > Sites
+3. Right-click "Default Web Site" > Add Virtual Directory
+   - Alias: vdjsync
+   - Physical path: C:\VDJSyncData
+   - Click OK
+
+4. Click on the "vdjsync" virtual directory in the left panel
+5. Double-click "WebDAV Authoring Rules" in the center panel
+6. In the right panel, click "Add Authoring Rule..."
+   - Allow access to: All content
+   - Allow access to this content to: All users
+   - Permissions: Check Read, Source, Write
+   - Click OK
+
+7. In the right panel, click "WebDAV Settings"
+   - Set "Allow Anonymous Property Queries" = True
+   - Set "Allow Property Queries with Infinite Depth" = False
+   - Under "Property Behavior" set "Allow Custom Properties" = True
+   - Under "Property Behavior" set "Allow Property Queries..." = True
+   - Click "Apply" in the right panel
+
+8. Go back to the "vdjsync" virtual directory
+9. Double-click "Authentication"
+   - Disable "Anonymous Authentication"
+   - Enable "Basic Authentication"
+
+10. Double-click "Directory Browsing" and click "Enable" in right panel
+
+
+STEP 4: Create a user account for WebDAV
+------------------------------------------
+1. Open Computer Management (right-click Start > Computer Management)
+2. Go to Local Users and Groups > Users
+3. Right-click > New User
+   - Username: vdjsync
+   - Password: (choose a strong password)
+   - Uncheck "User must change password at next logon"
+   - Check "Password never expires"
+   - Click Create
+
+4. Go back to C:\VDJSyncData folder properties > Security
+5. Add the "vdjsync" user with "Modify" permission
+
+
+STEP 5: Configure your firewall (Draytek)
+-------------------------------------------
+1. Log into your Draytek router admin page
+2. Go to NAT > Port Redirection (or Open Ports)
+3. Add a rule:
+   - Service: HTTPS
+   - Protocol: TCP
+   - External port: 443
+   - Internal IP: (your Windows 11 server's LAN IP)
+   - Internal port: 443
+4. Save and apply
+
+If you want to use HTTP (port 80) for testing first:
+   - External port: 80, Internal port: 80
+
+Note: For HTTPS you'll need an SSL certificate. Options:
+  a) Use Let's Encrypt with win-acme (free, auto-renewing)
+  b) Use a self-signed certificate (works but clients get warnings)
+  c) Use HTTP only on port 80 (not recommended for production)
+
+
+STEP 6: Test the connection
+-----------------------------
+On any PC, open a web browser and go to:
+  http://your-server-ip/vdjsync/
+
+Or if using your DNS name:
+  http://your-dns-name/vdjsync/
+
+You should be prompted for username/password.
+Enter the vdjsync credentials you created in Step 4.
+You should see an empty directory listing.
+
+
+STEP 7: Configure VDJ Sync client
+------------------------------------
+1. Run VDJSync.exe on a client PC
+2. Enter the 2-3 character PC name when prompted
+3. Right-click the tray icon > Settings
+4. Enter:
+   - Server URL: http://your-dns-name/vdjsync
+     (or https://your-dns-name/vdjsync if you set up SSL)
+   - Username: vdjsync
+   - Password: (the password from Step 4)
+5. All local paths should be pre-filled with VirtualDJ defaults
+6. Click Save
+
+
+TROUBLESHOOTING
+-----------------
+If you get 405 Method Not Allowed:
+  - Make sure WebDAV Publishing is enabled in Windows Features
+  - Check that WebDAV Authoring Rules are set on the vdjsync directory
+
+If you get 401 Unauthorized:
+  - Verify Basic Authentication is enabled and Anonymous is disabled
+  - Check the username and password are correct
+
+If you get 403 Forbidden:
+  - Check that the NTFS permissions on C:\VDJSyncData include
+    the vdjsync user with Modify permission
+
+If clients can't connect from hotel WiFi:
+  - Some hotels block port 80/443 outbound (rare but happens)
+  - Try using a non-standard port like 8443
+  - Update the Draytek port forwarding accordingly
+
+
+PHP PAGE FOR MP3 ZIPS (for your existing web server)
+------------------------------------------------------
+Create a file called mp3list.php on your PHP web server:
+
+<?php
+// Place this in the same directory as your zip files
+$files = glob('*.zip');
+sort($files);
+foreach ($files as $f) {
+    echo '<a href="' . $f . '">' . $f . '</a>' . "\n";
+}
+?>
+
+Then in VDJ Sync settings, set the MP3 Listing URL to:
+  https://your-php-server.com/mp3folder/mp3list.php
