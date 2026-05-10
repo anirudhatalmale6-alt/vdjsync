@@ -969,7 +969,10 @@ namespace VDJSync
         {
             var urls = new List<string>();
 
-            foreach (string rawLine in content.Split(new[] { '\r', '\n' },
+            string normalized = Regex.Replace(content, @"<\s*/?\s*br\s*/?\s*>", "\n",
+                RegexOptions.IgnoreCase);
+
+            foreach (string rawLine in normalized.Split(new[] { '\r', '\n' },
                 StringSplitOptions.RemoveEmptyEntries))
             {
                 string line = rawLine.Trim();
