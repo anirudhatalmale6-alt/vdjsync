@@ -638,7 +638,12 @@ namespace VDJSync
         public void Error(string message, Exception ex = null)
         {
             if (ex != null)
-                Write("ERROR", message + " | " + ex.GetType().Name + ": " + ex.Message);
+            {
+                string detail = ex.GetType().Name + ": " + ex.Message;
+                if (ex.InnerException != null)
+                    detail += " --> " + ex.InnerException.GetType().Name + ": " + ex.InnerException.Message;
+                Write("ERROR", message + " | " + detail);
+            }
             else
                 Write("ERROR", message);
         }
@@ -791,8 +796,10 @@ namespace VDJSync
 
         public byte[] DownloadBytes(string fullUrl, string username = null, string password = null)
         {
+            string safeUrl = fullUrl.Replace(" ", "%20");
             using (var handler = new HttpClientHandler())
             {
+                handler.ServerCertificateCustomValidationCallback = (msg, cert, chain, errors) => true;
                 if (!string.IsNullOrEmpty(username))
                 {
                     handler.Credentials = new NetworkCredential(username, password);
@@ -800,7 +807,7 @@ namespace VDJSync
                 }
                 using (var client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(30) })
                 {
-                    var response = client.GetAsync(fullUrl).GetAwaiter().GetResult();
+                    var response = client.GetAsync(safeUrl).GetAwaiter().GetResult();
                     response.EnsureSuccessStatusCode();
                     return response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
                 }
@@ -809,8 +816,10 @@ namespace VDJSync
 
         public string DownloadString(string fullUrl, string username = null, string password = null)
         {
+            string safeUrl = fullUrl.Replace(" ", "%20");
             using (var handler = new HttpClientHandler())
             {
+                handler.ServerCertificateCustomValidationCallback = (msg, cert, chain, errors) => true;
                 if (!string.IsNullOrEmpty(username))
                 {
                     handler.Credentials = new NetworkCredential(username, password);
@@ -818,7 +827,7 @@ namespace VDJSync
                 }
                 using (var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) })
                 {
-                    return client.GetStringAsync(fullUrl).GetAwaiter().GetResult();
+                    return client.GetStringAsync(safeUrl).GetAwaiter().GetResult();
                 }
             }
         }
