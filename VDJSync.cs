@@ -1047,6 +1047,7 @@ namespace VDJSync
             _errorCount = 0;
             _filesUploaded = 0;
             _filesDownloaded = 0;
+            _filesSkipped = 0;
 
             _log.RotateIfNeeded();
             _log.Info("========== Sync started ==========");
@@ -1059,8 +1060,9 @@ namespace VDJSync
             RunTask("Task 6: Download MP3 zips", Task6_DownloadMP3Zips);
             RunTask("Task 7: Upload log", Task7_UploadLog);
 
-            string summary = string.Format("Sync complete. {0} uploaded, {1} downloaded, {2} error(s).",
-                _filesUploaded, _filesDownloaded, _errorCount);
+            string summary = string.Format(
+                "Sync complete. {0} uploaded, {1} downloaded, {2} unchanged, {3} error(s).",
+                _filesUploaded, _filesDownloaded, _filesSkipped, _errorCount);
             _log.Info("========== " + summary + " ==========");
 
             return new SyncResult
@@ -1310,6 +1312,8 @@ namespace VDJSync
             }
         }
 
+        private int _filesSkipped;
+
         private void DownloadFolderRecursive(string remoteDir, string localDir)
         {
             Directory.CreateDirectory(localDir);
@@ -1338,6 +1342,17 @@ namespace VDJSync
                     try
                     {
                         string localPath = Path.Combine(localDir, item.Name);
+
+                        if (File.Exists(localPath))
+                        {
+                            var localFile = new FileInfo(localPath);
+                            if (item.ContentLength > 0 && localFile.Length == item.ContentLength)
+                            {
+                                _filesSkipped++;
+                                continue;
+                            }
+                        }
+
                         _client.DownloadFile(remoteDir + "/" + item.Name, localPath);
                         _filesDownloaded++;
                     }
