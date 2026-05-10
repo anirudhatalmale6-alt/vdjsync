@@ -1089,7 +1089,7 @@ namespace VDJSync
             _client.EnsureDirectory("Tracklisting/" + _pcName);
 
             UploadFolderRecursive(_settings.TracklistingFolderPath,
-                "Tracklisting/" + _pcName, "zOthers");
+                "Tracklisting/" + _pcName, new[] { "zOthers" });
         }
 
         private void Task3_DownloadTracklisting()
@@ -1105,15 +1105,15 @@ namespace VDJSync
                 return;
             }
 
-            string localZOthers = Path.Combine(_settings.TracklistingFolderPath, "zOthers");
-            Directory.CreateDirectory(localZOthers);
+            string localDest = Path.Combine(_settings.PlaylistsFolderPath, "zOthersHistory");
+            Directory.CreateDirectory(localDest);
 
             foreach (var item in items)
             {
                 if (!item.IsCollection) continue;
                 if (item.Name.Equals(_pcName, StringComparison.OrdinalIgnoreCase)) continue;
 
-                string localDir = Path.Combine(localZOthers, item.Name);
+                string localDir = Path.Combine(localDest, item.Name);
                 DownloadFolderRecursive("Tracklisting/" + item.Name, localDir);
             }
         }
@@ -1130,7 +1130,7 @@ namespace VDJSync
             _client.EnsureDirectory("Playlists/" + _pcName);
 
             UploadFolderRecursive(_settings.PlaylistsFolderPath,
-                "Playlists/" + _pcName, "zOthers");
+                "Playlists/" + _pcName, new[] { "zOthers", "zOthersHistory" });
         }
 
         private void Task5_DownloadPlaylists()
@@ -1223,7 +1223,7 @@ namespace VDJSync
             _log.Info("  Log uploaded to server.");
         }
 
-        private void UploadFolderRecursive(string localDir, string remoteDir, string excludeFolder)
+        private void UploadFolderRecursive(string localDir, string remoteDir, string[] excludeFolders)
         {
             _client.EnsureDirectory(remoteDir);
 
@@ -1245,9 +1245,16 @@ namespace VDJSync
             foreach (string subDir in Directory.GetDirectories(localDir))
             {
                 string dirName = new DirectoryInfo(subDir).Name;
-                if (!string.IsNullOrEmpty(excludeFolder) &&
-                    dirName.Equals(excludeFolder, StringComparison.OrdinalIgnoreCase))
-                    continue;
+                bool skip = false;
+                if (excludeFolders != null)
+                {
+                    foreach (string ex in excludeFolders)
+                    {
+                        if (dirName.Equals(ex, StringComparison.OrdinalIgnoreCase))
+                        { skip = true; break; }
+                    }
+                }
+                if (skip) continue;
 
                 UploadFolderRecursive(subDir, remoteDir + "/" + dirName, null);
             }
