@@ -1215,7 +1215,31 @@ namespace VDJSync
                     File.WriteAllBytes(tempPath, data);
 
                     _log.Info("  Extracting to: " + _settings.MP3ExtractPath);
-                    ZipFile.ExtractToDirectory(tempPath, _settings.MP3ExtractPath);
+                    int extracted = 0;
+                    int skipped = 0;
+                    using (var archive = ZipFile.OpenRead(tempPath))
+                    {
+                        foreach (var entry in archive.Entries)
+                        {
+                            if (string.IsNullOrEmpty(entry.Name)) continue;
+
+                            string destPath = Path.Combine(_settings.MP3ExtractPath,
+                                entry.FullName.Replace('/', '\\'));
+                            string destDir = Path.GetDirectoryName(destPath);
+                            if (!string.IsNullOrEmpty(destDir))
+                                Directory.CreateDirectory(destDir);
+
+                            if (File.Exists(destPath))
+                            {
+                                skipped++;
+                                continue;
+                            }
+                            entry.ExtractToFile(destPath);
+                            extracted++;
+                        }
+                    }
+                    _log.Info(string.Format("  Extracted {0} file(s), skipped {1} existing.",
+                        extracted, skipped));
 
                     File.Delete(tempPath);
                     MP3ZipTracker.MarkCompleted(zipName);
