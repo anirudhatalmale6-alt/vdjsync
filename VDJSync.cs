@@ -37,6 +37,9 @@ namespace VDJSync
 
             try
             {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
+                    | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 
