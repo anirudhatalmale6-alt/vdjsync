@@ -314,7 +314,16 @@ namespace VDJSync
             using (var frm = new SettingsForm())
             {
                 if (frm.ShowDialog() == DialogResult.OK)
+                {
                     _settings = AppSettings.Load();
+                    string newName = RegistryHelper.GetPCName();
+                    if (!string.IsNullOrEmpty(newName) && newName != _pcName)
+                    {
+                        _pcName = newName;
+                        _trayIcon.Text = "VDJ Sync - " + _pcName;
+                        _trayIcon.ContextMenuStrip.Items[0].Text = "VDJ Sync - " + _pcName;
+                    }
+                }
             }
         }
 
@@ -1348,6 +1357,8 @@ namespace VDJSync
 
     class SettingsForm : Form
     {
+        private TextBox _txtPCName;
+        private CheckBox _chkAutoStart;
         private TextBox _txtServerUrl, _txtUsername, _txtPassword;
         private TextBox _txtTracklistFile, _txtTracklistingFolder, _txtPlaylistsFolder;
         private TextBox _txtMP3ExtractPath, _txtSpare1, _txtSpare2;
@@ -1360,10 +1371,34 @@ namespace VDJSync
             MaximizeBox = false;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(580, 580);
+            ClientSize = new Size(580, 650);
             Font = new Font("Segoe UI", 9f);
 
             int y = 10;
+
+            // General group
+            var grpGeneral = new GroupBox
+            {
+                Text = "General",
+                Location = new Point(10, y),
+                Size = new Size(555, 60)
+            };
+            Controls.Add(grpGeneral);
+
+            AddLabel(grpGeneral, "PC Name:", 15, 25);
+            _txtPCName = AddTextBox(grpGeneral, 110, 22, 60);
+            _txtPCName.MaxLength = 3;
+            _txtPCName.CharacterCasing = CharacterCasing.Upper;
+
+            _chkAutoStart = new CheckBox
+            {
+                Text = "Start with Windows",
+                Location = new Point(200, 24),
+                AutoSize = true
+            };
+            grpGeneral.Controls.Add(_chkAutoStart);
+
+            y += 70;
 
             // WebDAV group
             var grpWebDav = new GroupBox
@@ -1484,6 +1519,9 @@ namespace VDJSync
 
         private void LoadSettings()
         {
+            _txtPCName.Text = RegistryHelper.GetPCName() ?? "";
+            _chkAutoStart.Checked = IsAutoStartEnabled();
+
             var s = AppSettings.Load();
             _txtServerUrl.Text = s.WebDavUrl;
             _txtUsername.Text = s.WebDavUsername;
@@ -1501,6 +1539,14 @@ namespace VDJSync
 
         private void SaveSettings()
         {
+            string pcName = _txtPCName.Text.Trim();
+            if (!Regex.IsMatch(pcName, @"^[A-Za-z0-9]{2,3}$"))
+            {
+                MessageBox.Show("PC Name must be 2-3 letters/numbers.",
+                    "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             string url = _txtServerUrl.Text.Trim();
             if (!string.IsNullOrEmpty(url) &&
                 !url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
@@ -1510,6 +1556,9 @@ namespace VDJSync
                     "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+
+            RegistryHelper.SetPCName(pcName.ToUpper());
+            SetAutoStart(_chkAutoStart.Checked);
 
             var s = new AppSettings
             {
@@ -1620,6 +1669,33 @@ namespace VDJSync
             };
             parent.Controls.Add(btn);
             return btn;
+        }
+
+        private const string StartupKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+
+        private bool IsAutoStartEnabled()
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey(StartupKeyPath))
+            {
+                if (key == null) return false;
+                return key.GetValue("VDJSync") != null;
+            }
+        }
+
+        private void SetAutoStart(bool enabled)
+        {
+            using (var key = Registry.CurrentUser.CreateSubKey(StartupKeyPath))
+            {
+                if (enabled)
+                {
+                    string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                    key.SetValue("VDJSync", "\"" + exePath + "\"", RegistryValueKind.String);
+                }
+                else
+                {
+                    key.DeleteValue("VDJSync", false);
+                }
+            }
         }
     }
 
