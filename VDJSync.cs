@@ -348,12 +348,12 @@ namespace VDJSync
 
         private void Quit()
         {
-            _syncTimer?.Dispose();
+            if (_syncTimer != null) _syncTimer.Dispose();
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
-            _iconGreen?.Dispose();
-            _iconBlue?.Dispose();
-            _iconRed?.Dispose();
+            if (_iconGreen != null) _iconGreen.Dispose();
+            if (_iconBlue != null) _iconBlue.Dispose();
+            if (_iconRed != null) _iconRed.Dispose();
             Application.Exit();
         }
 
@@ -361,11 +361,11 @@ namespace VDJSync
         {
             if (disposing)
             {
-                _syncTimer?.Dispose();
-                _trayIcon?.Dispose();
-                _iconGreen?.Dispose();
-                _iconBlue?.Dispose();
-                _iconRed?.Dispose();
+                if (_syncTimer != null) _syncTimer.Dispose();
+                if (_trayIcon != null) _trayIcon.Dispose();
+                if (_iconGreen != null) _iconGreen.Dispose();
+                if (_iconBlue != null) _iconBlue.Dispose();
+                if (_iconRed != null) _iconRed.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -414,7 +414,7 @@ namespace VDJSync
         public static string GetPCName()
         {
             using (var key = Registry.CurrentUser.OpenSubKey(KeyPath))
-                return key?.GetValue("PCName") as string;
+                return key != null ? key.GetValue("PCName") as string : null;
         }
 
         public static void SetPCName(string name)
@@ -430,19 +430,19 @@ namespace VDJSync
 
     class AppSettings
     {
-        public string WebDavUrl { get; set; } = "";
-        public string WebDavUsername { get; set; } = "";
-        public string WebDavPassword { get; set; } = "";
+        public string WebDavUrl { get; set; }
+        public string WebDavUsername { get; set; }
+        public string WebDavPassword { get; set; }
         public string TracklistFilePath { get; set; }
         public string TracklistingFolderPath { get; set; }
         public string PlaylistsFolderPath { get; set; }
-        public string MP3ExtractPath { get; set; } = @"X:\";
-        public string MP3ListingPageUrl { get; set; } = "";
-        public string MP3PageUsername { get; set; } = "";
-        public string MP3PagePassword { get; set; } = "";
-        public string SparePath1 { get; set; } = "";
-        public string SparePath2 { get; set; } = "";
-        public string LastSyncTime { get; set; } = "";
+        public string MP3ExtractPath { get; set; }
+        public string MP3ListingPageUrl { get; set; }
+        public string MP3PageUsername { get; set; }
+        public string MP3PagePassword { get; set; }
+        public string SparePath1 { get; set; }
+        public string SparePath2 { get; set; }
+        public string LastSyncTime { get; set; }
 
         public static string SettingsDir
         {
@@ -461,6 +461,17 @@ namespace VDJSync
 
         public AppSettings()
         {
+            WebDavUrl = "";
+            WebDavUsername = "";
+            WebDavPassword = "";
+            MP3ExtractPath = @"X:\";
+            MP3ListingPageUrl = "";
+            MP3PageUsername = "";
+            MP3PagePassword = "";
+            SparePath1 = "";
+            SparePath2 = "";
+            LastSyncTime = "";
+
             string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             string vdj = Path.Combine(docs, "VirtualDJ");
             TracklistFilePath = Path.Combine(vdj, "History", "tracklist.txt");
@@ -593,7 +604,7 @@ namespace VDJSync
         private static string ReadNode(XmlDocument doc, string xpath)
         {
             var node = doc.SelectSingleNode(xpath);
-            return node?.InnerText;
+            return node != null ? node.InnerText : null;
         }
 
         private static void AddElement(XmlDocument doc, XmlElement parent, string name, string value)
@@ -837,7 +848,7 @@ namespace VDJSync
                 var item = new WebDavItem();
 
                 var hrefNode = FindChild(resp, "href", nsMgr);
-                item.Href = hrefNode?.InnerText ?? "";
+                item.Href = hrefNode != null ? hrefNode.InnerText : "";
 
                 string name = Uri.UnescapeDataString(item.Href.TrimEnd('/'));
                 int lastSlash = name.LastIndexOf('/');
@@ -895,7 +906,7 @@ namespace VDJSync
 
         public void Dispose()
         {
-            _client?.Dispose();
+            if (_client != null) _client.Dispose();
         }
     }
 
