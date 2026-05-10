@@ -810,6 +810,7 @@ namespace VDJSync
                 }
                 using (var client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(30) })
                 {
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("VDJSync/1.0");
                     var response = client.GetAsync(safeUrl).GetAwaiter().GetResult();
                     response.EnsureSuccessStatusCode();
                     return response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
@@ -830,6 +831,7 @@ namespace VDJSync
                 }
                 using (var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) })
                 {
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("VDJSync/1.0");
                     return client.GetStringAsync(safeUrl).GetAwaiter().GetResult();
                 }
             }
