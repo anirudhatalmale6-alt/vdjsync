@@ -474,7 +474,7 @@ namespace VDJSync
 
             string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             string vdj = Path.Combine(docs, "VirtualDJ");
-            TracklistFilePath = Path.Combine(vdj, "History", "tracklist.txt");
+            TracklistFilePath = Path.Combine(vdj, "Tracklisting", "tracklist.txt");
             TracklistingFolderPath = Path.Combine(vdj, "Tracklisting");
             PlaylistsFolderPath = Path.Combine(vdj, "Playlists");
         }
